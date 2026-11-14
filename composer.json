@@ -1,0 +1,23 @@
+{
+  "name": "chargemyride/ladesaeulen-wache",
+  "description": "Offene Ladesäulen-Wache: liest die AFIR-/DATEX-II-Daten der Mobilithek und berechnet daraus Zuverlässigkeits-Kennzahlen für öffentliche Ladesäulen.",
+  "type": "library",
+  "license": "EUPL-1.2",
+  "keywords": ["afir", "datex-ii", "mobilithek", "ladesaeulen", "e-mobilitaet", "open-data"],
+  "homepage": "https://chargemyride.live/bericht",
+  "require": {
+    "php": ">=8.1",
+    "ext-json": "*",
+    "ext-pdo": "*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.5"
+  },
+  "autoload": {
+    "psr-4": { "Ladewache\\": "src/" }
+  },
+  "autoload-dev": {
+    "psr-4": { "Ladewache\\Tests\\": "tests/" }
+  },
+  "bin": ["bin/ladepunkte", "bin/status", "bin/monatsbericht"]
+}

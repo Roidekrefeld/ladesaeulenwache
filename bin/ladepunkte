@@ -1,0 +1,35 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Ladepunkte aus einem statischen AFIR-Abzug der Mobilithek als CSV.
+ *
+ *   bin/ladepunkte abzug.json > ladepunkte.csv
+ *
+ * Liest die Datei Standort für Standort, auch wenn sie mehrere hundert MB groß ist.
+ */
+require __DIR__ . '/../autoload.php';
+
+use Ladewache\Datex\Recharging;
+use Ladewache\Datex\SiteReader;
+
+$datei = $argv[1] ?? '';
+if ($datei === '' || !is_file($datei)) {
+    fwrite(STDERR, "Aufruf: bin/ladepunkte <statischer-abzug.json>\n");
+    exit(2);
+}
+
+$out = fopen('php://stdout', 'w');
+fputcsv($out, ['ref', 'evse', 'lat', 'lon', 'preis_kwh', 'startgebuehr', 'blockiergebuehr_min', 'brutto'], ';', '"', '');
+$n = 0;
+foreach (SiteReader::sites($datei) as $site) {
+    foreach (Recharging::points($site) as $p) {
+        $t = $p['tariff'];
+        fputcsv($out, [
+            $p['ref'], $p['evse'] ?? '', $p['lat'], $p['lon'],
+            $t['perKwh'] ?? '', $t['sessionFee'] ?? '', $t['blockingPerMinute'] ?? '',
+            $t === null || $t['taxIncluded'] === null ? '' : ($t['taxIncluded'] ? '1' : '0'),
+        ], ';', '"', '');
+        $n++;
+    }
+}
+fwrite(STDERR, "$n Ladepunkte\n");

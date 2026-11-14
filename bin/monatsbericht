@@ -1,0 +1,46 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Monatsbericht aus einer Messreihe (SQLite, Tabelle `samples`) als JSON.
+ *
+ *   bin/monatsbericht --db=messreihe.sqlite --monat=2026-10 [--meta=stationen.csv] [--beginn=2026-09-03]
+ *
+ * stationen.csv (Semikolon, mit Kopfzeile):
+ *   station_id;ags;land;betreiber;kw
+ * ags = Amtlicher Gemeindeschlüssel des Kreises (5 Stellen), land = 2 Stellen.
+ * Ohne Metadaten gibt es nur die Bundeszahlen und die Dauerstörungen.
+ */
+require __DIR__ . '/../autoload.php';
+
+use Ladewache\Kennzahlen\Monatsbericht;
+
+$opt = getopt('', ['db:', 'monat:', 'meta::', 'beginn::']);
+if (empty($opt['db']) || empty($opt['monat']) || !preg_match('/^\d{4}-\d{2}$/', (string) $opt['monat'])) {
+    fwrite(STDERR, "Aufruf: bin/monatsbericht --db=messreihe.sqlite --monat=JJJJ-MM [--meta=stationen.csv] [--beginn=JJJJ-MM-TT]\n");
+    exit(2);
+}
+
+$pdo = new PDO('sqlite:' . $opt['db'], null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+[$von, $bis] = Monatsbericht::zeitraum((string) $opt['monat'], isset($opt['beginn']) ? (string) $opt['beginn'] : null);
+$scan = Monatsbericht::scan($pdo, $von, $bis);
+
+$meta = [];
+if (!empty($opt['meta'])) {
+    $fh = fopen((string) $opt['meta'], 'r');
+    $kopf = fgetcsv($fh, null, ';', '"', '');
+    while (($z = fgetcsv($fh, null, ';', '"', '')) !== false) {
+        $r = array_combine($kopf, array_pad($z, count($kopf), ''));
+        $meta[(int) $r['station_id']] = [
+            'ags' => $r['ags'] !== '' ? $r['ags'] : null,
+            'land' => $r['land'] !== '' ? $r['land'] : null,
+            'op' => $r['betreiber'] ?? null,
+            'kw' => (float) ($r['kw'] ?? 0),
+            'ort' => null,
+            'adresse' => null,
+        ];
+    }
+}
+
+$bericht = Monatsbericht::auswerten($scan['stations'], $meta, [], [], $von, $bis);
+$bericht['zeilen'] = $scan['rows'];
+echo json_encode($bericht, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), "\n";

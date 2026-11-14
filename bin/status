@@ -1,0 +1,26 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Live-Status aus einem dynamischen AFIR-Abruf der Mobilithek als CSV.
+ *
+ *   bin/status abruf.json > status.csv
+ *
+ * Zustände: available, occupied, reserved, outOfService, unknown.
+ */
+require __DIR__ . '/../autoload.php';
+
+use Ladewache\Datex\Recharging;
+
+$datei = $argv[1] ?? '';
+$doc = $datei !== '' && is_file($datei) ? json_decode((string) file_get_contents($datei), true) : null;
+if (!is_array($doc)) {
+    fwrite(STDERR, "Aufruf: bin/status <dynamischer-abruf.json>\n");
+    exit(2);
+}
+
+$out = fopen('php://stdout', 'w');
+fputcsv($out, ['ref', 'status'], ';', '"', '');
+foreach (Recharging::statuses($doc) as $ref => $status) {
+    fputcsv($out, [$ref, $status], ';', '"', '');
+}
+fwrite(STDERR, 'Veröffentlicht: ' . (Recharging::publicationTime($doc) ?? 'unbekannt') . "\n");
