@@ -324,6 +324,34 @@ final class RechargingTest extends TestCase
         self::assertSame('2026-09-02T22:34:06Z', Recharging::publicationTime($doc));
     }
 
+    public function test_nicht_in_betrieb_ist_keine_stoerung(): void
+    {
+        // inoperative = noch nicht oder nicht mehr in Betrieb (DATEX II/AFIR).
+        // Als Störung gezählt, standen Säulen vor der Eröffnung wochenlang als
+        // „kaputt“ in der Liste. Gestört ist nur, was der Betreiber so meldet.
+        $punkt = static fn(string $id, string $wert) => ['aegiElectricChargingPointStatus' => [
+            'reference' => ['idG' => $id], 'status' => ['value' => $wert],
+        ]];
+        $doc = ['payload' => ['aegiEnergyInfrastructureStatusPublication' => [
+            'energyInfrastructureSiteStatus' => [[
+                'energyInfrastructureStationStatus' => [[
+                    'refillPointStatus' => [
+                        $punkt('A', 'inoperative'),
+                        $punkt('B', 'notAvailable'),
+                        $punkt('C', 'planned'),
+                        $punkt('D', 'faulted'),
+                        $punkt('E', 'outOfOrder'),
+                    ],
+                ]],
+            ]],
+        ]]];
+
+        self::assertSame(
+            ['A' => 'unknown', 'B' => 'unknown', 'C' => 'unknown', 'D' => 'outOfService', 'E' => 'outOfService'],
+            Recharging::statuses($doc)
+        );
+    }
+
     public function test_die_nutzlast_darf_auch_verpackt_und_als_liste_kommen(): void
     {
         // Tesla verpackt in messageContainer und liefert die Nutzlast als Liste.

@@ -45,6 +45,13 @@ final class Recharging
      * 'removed' zählt bewusst als unbekannt und nicht als außer Betrieb: Der
      * Ladepunkt ist abgebaut, über den Standort sagt das nichts. Als Störung
      * gezählt würde er eine Serie auslösen, die nie endet.
+     *
+     * Aus demselben Grund (seit 15.11.2026) 'inoperative' und 'notavailable':
+     * Nach DATEX II/AFIR heißt das „noch nicht oder nicht mehr in Betrieb“ –
+     * eine Säule vor der Eröffnung oder nach der Stilllegung, keine Störung.
+     * Eine Stichprobe von 40 Dauerstörungen zeigte, dass genau solche Punkte
+     * wochenlang als „kaputt“ geführt wurden. Als Störung zählt nur, was der
+     * Betreiber ausdrücklich so meldet: outOfOrder, faulted, outOfService.
      */
     private const STATUS_MAP = [
         'available' => 'available',
@@ -55,9 +62,9 @@ final class Recharging
         'reserved' => 'reserved',
         'outoforder' => 'outOfService',
         'outofservice' => 'outOfService',
-        'inoperative' => 'outOfService',
         'faulted' => 'outOfService',
-        'notavailable' => 'outOfService',
+        'inoperative' => 'unknown',
+        'notavailable' => 'unknown',
         'unknown' => 'unknown',
         'removed' => 'unknown',
         'planned' => 'unknown',
