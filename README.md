@@ -20,8 +20,8 @@ Der Stand ist **0.1**. Einlesen und Kennzahlen laufen in Betrieb und sind getest
 PHP 8.1 oder neuer, ohne weitere Abhängigkeiten.
 
 ```sh
-git clone https://github.com/Roidekrefeld/ladesaeulen-wache.git
-cd ladesaeulen-wache
+git clone https://github.com/Roidekrefeld/ladesaeulenwache.git
+cd ladesaeulenwache
 
 # Ladepunkte eines statischen Abzugs als CSV
 bin/ladepunkte statischer-abzug.json > ladepunkte.csv
