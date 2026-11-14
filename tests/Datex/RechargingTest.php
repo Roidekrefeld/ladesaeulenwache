@@ -352,6 +352,24 @@ final class RechargingTest extends TestCase
         );
     }
 
+    public function test_der_rohwert_bleibt_erhalten(): void
+    {
+        $doc = ['payload' => ['aegiEnergyInfrastructureStatusPublication' => [
+            'energyInfrastructureSiteStatus' => [[
+                'energyInfrastructureStationStatus' => [[
+                    'refillPointStatus' => [
+                        ['aegiElectricChargingPointStatus' => ['reference' => ['idG' => 'A'], 'status' => ['value' => 'inoperative']]],
+                        ['aegiElectricChargingPointStatus' => ['reference' => ['idG' => 'B'], 'status' => ['value' => 'outOfOrder']]],
+                    ],
+                ]],
+            ]],
+        ]]];
+
+        self::assertSame(['A' => 'inoperative', 'B' => 'outOfOrder'], Recharging::rawStatuses($doc));
+        self::assertSame('outOfService', Recharging::map('FAULTED'));
+        self::assertSame('unknown', Recharging::map('irgendwas'));
+    }
+
     public function test_die_nutzlast_darf_auch_verpackt_und_als_liste_kommen(): void
     {
         // Tesla verpackt in messageContainer und liefert die Nutzlast als Liste.

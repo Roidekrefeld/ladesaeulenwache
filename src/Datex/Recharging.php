@@ -321,17 +321,40 @@ final class Recharging
     }
 
     /**
-     * Die Belegung aus einem dynamischen Abruf.
+     * Ein Zustand aus dem Profil, auf die eigenen abgebildet.
+     */
+    public static function map(string $raw): string
+    {
+        return self::STATUS_MAP[strtolower($raw)] ?? 'unknown';
+    }
+
+    /**
+     * Die Belegung aus einem dynamischen Abruf, auf die eigenen Zustände abgebildet.
+     *
+     * @param array<string, mixed> $doc
+     * @return array<string, string> idG des Ladepunkts => eigener Zustand
+     */
+    public static function statuses(array $doc): array
+    {
+        return array_map(self::map(...), self::rawStatuses($doc));
+    }
+
+    /**
+     * Die Belegung aus einem dynamischen Abruf, so wie der Betreiber sie meldet.
      *
      * Gibt zurück, was in dieser einen Nachricht stand – bei einem Vollbild der
      * Zustand aller Ladepunkte des Anbieters, bei einem Delta nur die zuletzt
      * gemeldeten Änderungen. Welches von beidem es ist, weiß diese Klasse
      * nicht und soll sie nicht wissen; das muss der Aufrufer je Angebot festlegen.
      *
+     * Seit 15.11.2026 bleibt der Rohwert (outOfOrder, inoperative, faulted …)
+     * erhalten: Ohne ihn ließ sich nachträglich nicht mehr sagen, ob eine Säule
+     * gestört oder nur noch nicht eröffnet war.
+     *
      * @param array<string, mixed> $doc
-     * @return array<string, string> idG des Ladepunkts => eigener Zustand
+     * @return array<string, string> idG des Ladepunkts => Zustand laut Betreiber
      */
-    public static function statuses(array $doc): array
+    public static function rawStatuses(array $doc): array
     {
         $out = [];
 
@@ -368,7 +391,7 @@ final class Recharging
                             continue;
                         }
 
-                        $out[$ref] = self::STATUS_MAP[strtolower($value)] ?? 'unknown';
+                        $out[$ref] = $value;
                     }
                 }
             }
