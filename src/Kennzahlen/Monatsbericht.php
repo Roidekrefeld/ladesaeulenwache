@@ -236,7 +236,7 @@ final class Monatsbericht
      * Aus den Stationssummen den Bericht bilden – ohne Datenbank, damit er sich prüfen lässt.
      *
      * @param array<int, array<string, mixed>> $stationen station_id => station()
-     * @param array<int, array{ags?: ?string, land?: ?string, op?: ?string, kw?: float, klasse?: ?string, ort?: ?string, adresse?: ?string, ladepunkte?: ?int, aktiv_ab?: ?int}> $meta
+     * @param array<int, array{ags: ?string, land: ?string, op: ?string, kw: float, klasse?: ?string, ort?: ?string, adresse?: ?string, ladepunkte?: ?int, aktiv_ab?: ?int}> $meta
      * @param array<string, array{name: string, kind: ?string, stations: int}> $kreise AGS => Name/Art/Bestand laut Register
      * @param array<string, string> $laender
      * @return array<string, mixed>
@@ -289,7 +289,15 @@ final class Monatsbericht
             if ($s['sec'] <= 0 || $s['total'] <= 0) {
                 continue;
             }
-            $m = $meta[$id] ?? ['ags' => null, 'land' => null, 'op' => null, 'kw' => 0.0, 'ort' => null, 'adresse' => null];
+            $m = array_replace([
+                'ags' => null,
+                'land' => null,
+                'op' => null,
+                'kw' => 0.0,
+                'klasse' => null,
+                'ort' => null,
+                'adresse' => null,
+            ], $meta[$id] ?? []);
             $dauer = $s['lauf'] >= $min;
             $dc = (float) $m['kw'] >= 50;
             $klasse = (string) ($m['klasse'] ?? ($dc ? 'dc50' : 'ac'));
