@@ -116,7 +116,7 @@ class MonatsberichtTest extends TestCase
     public function testScanUebernimmtDieLetzteMeldungVorPeriodenbeginn(): void
     {
         $h = 3600;
-        $pdo = new \\PDO('sqlite::memory:');
+        $pdo = new \PDO('sqlite::memory:');
         $pdo->exec('CREATE TABLE samples (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             station_id INTEGER NOT NULL,
