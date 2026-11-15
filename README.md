@@ -53,6 +53,9 @@ CREATE TABLE samples (
   out_of_service INTEGER,           -- als gestört gemeldet
   unknown        INTEGER            -- ohne frische Meldung
 );
+
+-- Beschleunigt die Suche nach der letzten Meldung je Ladeeinrichtung.
+CREATE INDEX samples_station_time ON samples (station_id, ts_unix);
 ```
 
 `stationen.csv` ordnet die Ladeeinrichtungen zu, getrennt mit Semikolon: `station_id;ags;land;betreiber;kw`. Dabei ist `ags` der 5-stellige Kreisschlüssel und `land` der 2-stellige Länderschlüssel.
