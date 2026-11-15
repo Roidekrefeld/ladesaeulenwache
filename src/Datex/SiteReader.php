@@ -233,6 +233,13 @@ final class SiteReader
             $len = strlen($buffer);
 
             for (; $i < $len; $i++) {
+                if ($i >= self::MAX_SITE_BYTES) {
+                    // Vor der Verarbeitung weiterer Bytes abbrechen. Die
+                    // Prüfung erst nach dem Chunk wäre zu spät: Ein Objekt
+                    // könnte innerhalb desselben Chunks bereits geschlossen sein.
+                    return [$buffer, $eof, null];
+                }
+
                 $c = $buffer[$i];
 
                 if ($inString) {
