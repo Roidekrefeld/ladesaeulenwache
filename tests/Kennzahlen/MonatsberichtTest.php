@@ -153,6 +153,46 @@ class MonatsberichtTest extends TestCase
         $this->assertSame(2 * (Monatsbericht::MAX_HOLD - 2 * $h), $scan['stations'][3]['known']);
     }
 
+    public function testInventarOhneStatusmeldungenBleibtImAbdeckungsnenner(): void
+    {
+        $von = self::T0;
+        $bis = self::T0 + 10 * 3600;
+        $meta = [
+            17 => [
+                'ags' => '01001',
+                'land' => '01',
+                'op' => 'Schweigsam GmbH',
+                'kw' => 22.0,
+                'ladepunkte' => 2,
+                'aktiv_ab' => $von + 2 * 3600,
+            ],
+        ];
+
+        $bericht = Monatsbericht::auswerten([], $meta, [], [], $von, $bis);
+
+        // Erst ab dem bekannten Inbetriebnahmetag zählen die zwei Punkte.
+        $this->assertSame(1, $bericht['bund']['gemessen']);
+        $this->assertSame(0.0, $bericht['bund']['abdeckung']);
+        $this->assertNull($bericht['bund']['ausfall']);
+    }
+
+    public function testInventarErsetztKeineVorhandenenMesswerte(): void
+    {
+        $stationen = [
+            17 => ['sec' => 100, 'total' => 200, 'known' => 100, 'usable' => 100, 'busy' => 0,
+                   'oos' => 0, 'tot_sec' => 0, 'lauf' => 0, 'lauf_ab' => null, 'offen' => false],
+        ];
+        $meta = [
+            17 => ['ags' => '01001', 'land' => '01', 'op' => 'Bekannt GmbH', 'kw' => 22.0,
+                   'ladepunkte' => 8, 'aktiv_ab' => self::T0],
+        ];
+
+        $bericht = Monatsbericht::auswerten($stationen, $meta, [], [], self::T0, self::T0 + 100);
+
+        $this->assertSame(1, $bericht['bund']['gemessen']);
+        $this->assertSame(50.0, $bericht['bund']['abdeckung']);
+    }
+
     public function testMessluekeBeendetDauerstoerungNicht(): void
     {
         $tag = 86400;
