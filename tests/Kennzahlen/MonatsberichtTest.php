@@ -37,6 +37,53 @@ class MonatsberichtTest extends TestCase
         $this->assertSame(6 * $h, $s['known']);
     }
 
+    public function testZeitNachAblaufDerMeldegueltigkeitZaehltAlsUnbekannt(): void
+    {
+        $h = 3600;
+        $s = Monatsbericht::station([
+            self::z(self::T0, 1, 0, 1),
+        ], self::T0, self::T0 + 10 * $h);
+
+        $this->assertSame(10 * $h, $s['sec']);
+        $this->assertSame(20 * 10 * $h / 10, $s['total']);
+        $this->assertSame(2 * Monatsbericht::MAX_HOLD, $s['known']);
+        $this->assertSame(Monatsbericht::MAX_HOLD, $s['oos']);
+        $this->assertEqualsWithDelta(42.5, 100 * $s['known'] / $s['total'], 0.001);
+    }
+
+    public function testZeitVorDerErstenMeldungZaehltAlsUnbekannt(): void
+    {
+        $h = 3600;
+        $s = Monatsbericht::station([
+            self::z(self::T0 + 2 * $h, 2, 0, 0),
+        ], self::T0, self::T0 + 3 * $h);
+
+        $this->assertSame(3 * $h, $s['sec']);
+        $this->assertSame(6 * $h, $s['total']);
+        $this->assertSame(2 * $h, $s['known']);
+        $this->assertEqualsWithDelta(33.333, 100 * $s['known'] / $s['total'], 0.001);
+    }
+
+    public function testStationenOhneBekannteZeitBleibenImAbdeckungsnenner(): void
+    {
+        $stationen = [
+            1 => ['sec' => 100, 'total' => 100, 'known' => 0, 'usable' => 0, 'busy' => 0,
+                  'oos' => 0, 'tot_sec' => 0, 'lauf' => 0, 'lauf_ab' => null, 'offen' => false],
+            2 => ['sec' => 100, 'total' => 100, 'known' => 100, 'usable' => 100, 'busy' => 0,
+                  'oos' => 0, 'tot_sec' => 0, 'lauf' => 0, 'lauf_ab' => null, 'offen' => false],
+        ];
+        $meta = [
+            1 => ['ags' => '01001', 'land' => '01', 'op' => 'Schweigsam GmbH', 'kw' => 22.0],
+            2 => ['ags' => '01001', 'land' => '01', 'op' => 'Schweigsam GmbH', 'kw' => 22.0],
+        ];
+
+        $bericht = Monatsbericht::auswerten($stationen, $meta, [], [], 0, 100);
+
+        $this->assertSame(2, $bericht['bund']['gemessen']);
+        $this->assertSame(50.0, $bericht['bund']['abdeckung']);
+        $this->assertSame(50.0, $bericht['kreise']['01001']['abdeckung']);
+    }
+
     public function testMessluekeBeendetDauerstoerungNicht(): void
     {
         $tag = 86400;
