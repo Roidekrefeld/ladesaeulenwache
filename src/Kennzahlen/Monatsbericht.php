@@ -236,7 +236,7 @@ final class Monatsbericht
      * Aus den Stationssummen den Bericht bilden – ohne Datenbank, damit er sich prüfen lässt.
      *
      * @param array<int, array<string, mixed>> $stationen station_id => station()
-     * @param array<int, array{ags: ?string, land: ?string, op: ?string, kw: float, klasse: ?string, ort: ?string, adresse: ?string}> $meta
+     * @param array<int, array{ags?: ?string, land?: ?string, op?: ?string, kw?: float, klasse?: ?string, ort?: ?string, adresse?: ?string, ladepunkte?: ?int, aktiv_ab?: ?int}> $meta
      * @param array<string, array{name: string, kind: ?string, stations: int}> $kreise AGS => Name/Art/Bestand laut Register
      * @param array<string, string> $laender
      * @return array<string, mixed>
@@ -252,6 +252,35 @@ final class Monatsbericht
         $jeOp = [];
         $jeKlasse = [];
         $lang = [];
+
+        // Das Register kann Ladeeinrichtungen enthalten, von denen im
+        // Berichtszeitraum überhaupt keine Statusmeldung einging. Mit einer
+        // bekannten Punktzahl gehören sie trotzdem in den Abdeckungsnenner.
+        foreach ($meta as $id => $m) {
+            if (isset($stationen[$id])) {
+                continue;
+            }
+
+            $punkte = max(0, (int) ($m['ladepunkte'] ?? 0));
+            $aktivAb = max($von, (int) ($m['aktiv_ab'] ?? $von));
+            $sekunden = max(0, $bis - $aktivAb);
+            if ($punkte <= 0 || $sekunden <= 0) {
+                continue;
+            }
+
+            $stationen[$id] = [
+                'sec' => $sekunden,
+                'total' => $sekunden * $punkte,
+                'known' => 0,
+                'usable' => 0,
+                'busy' => 0,
+                'oos' => 0,
+                'tot_sec' => 0,
+                'lauf' => 0,
+                'lauf_ab' => null,
+                'offen' => false,
+            ];
+        }
 
         foreach ($stationen as $id => $s) {
             // Auch Stationen ohne frische Meldung gehören in den
