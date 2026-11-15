@@ -113,6 +113,40 @@ class MonatsberichtTest extends TestCase
         $this->assertSame(0, $s['oos']);
     }
 
+    public function testScanUebernimmtDieLetzteMeldungVorPeriodenbeginn(): void
+    {
+        $h = 3600;
+        $pdo = new \\PDO('sqlite::memory:');
+        $pdo->exec('CREATE TABLE samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            station_id INTEGER NOT NULL,
+            ts_unix INTEGER NOT NULL,
+            available INTEGER,
+            occupied INTEGER,
+            reserved INTEGER,
+            out_of_service INTEGER,
+            unknown INTEGER,
+            total INTEGER
+        )');
+
+        $insert = $pdo->prepare(
+            'INSERT INTO samples (station_id, ts_unix, available, occupied, reserved, out_of_service, unknown, total)
+             VALUES (?, ?, ?, ?, 0, ?, 0, 2)'
+        );
+        $insert->execute([1, self::T0 - 2 * $h, 1, 0, 1]);
+        $insert->execute([1, self::T0 + 3 * $h, 2, 0, 0]);
+        // Station 2 hat im Berichtszeitraum keine neue Meldung mehr.
+        $insert->execute([2, self::T0 - 10 * $h, 1, 0, 1]);
+
+        $scan = Monatsbericht::scan($pdo, self::T0, self::T0 + 4 * $h);
+
+        $this->assertSame(3, $scan['rows']);
+        $this->assertSame(6 * $h + 1800, $scan['stations'][1]['known']);
+        $this->assertSame(8 * $h, $scan['stations'][1]['total']);
+        $this->assertSame(0, $scan['stations'][2]['known']);
+        $this->assertSame(8 * $h, $scan['stations'][2]['total']);
+    }
+
     public function testMessluekeBeendetDauerstoerungNicht(): void
     {
         $tag = 86400;
