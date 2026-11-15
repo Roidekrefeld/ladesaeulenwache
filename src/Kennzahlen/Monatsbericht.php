@@ -188,22 +188,24 @@ final class Monatsbericht
     public static function scan(PDO $samples, int $von, int $bis): array
     {
         $stmt = $samples->prepare(
-            'SELECT station_id, ts_unix, available, occupied, reserved, out_of_service, unknown, total
+            'SELECT station_id, ts_unix, available, occupied, reserved, out_of_service, unknown, total, id
                FROM samples
               WHERE ts_unix >= ? AND ts_unix < ? AND out_of_service IS NOT NULL
              UNION ALL
              SELECT prior.station_id, prior.ts_unix, prior.available, prior.occupied,
-                    prior.reserved, prior.out_of_service, prior.unknown, prior.total
+                    prior.reserved, prior.out_of_service, prior.unknown, prior.total, prior.id
                FROM samples AS prior
               WHERE prior.out_of_service IS NOT NULL
-                AND prior.ts_unix = (
-                    SELECT MAX(previous.ts_unix)
+                AND prior.id = (
+                    SELECT previous.id
                       FROM samples AS previous
                      WHERE previous.station_id = prior.station_id
                        AND previous.ts_unix < ?
                        AND previous.out_of_service IS NOT NULL
+                     ORDER BY previous.ts_unix DESC, previous.id DESC
+                     LIMIT 1
                 )
-              ORDER BY station_id, ts_unix'
+              ORDER BY station_id, ts_unix, id'
         );
         // Die letzte Meldung vor Periodenbeginn ist nötig, um ihren gültigen
         // Anteil (höchstens MAX_HOLD) am Monatsanfang nicht zu verlieren.
