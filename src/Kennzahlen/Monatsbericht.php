@@ -88,10 +88,14 @@ final class Monatsbericht
                 // beobachtete Gesamtzahl dient als Nenner für diese Anlaufzeit.
                 self::unbekannt($s, $z['total'], max(0, $z['ts'] - $von));
             } else {
-                $naechste = max(0, $z['ts'] - $vorher['ts']);
+                // Eine Messung vor Periodenbeginn darf in die Periode
+                // hineinwirken, aber niemals Zeit davor verbuchen.
+                $intervallAb = max($vorher['ts'], $von);
+                $naechste = max(0, $z['ts'] - $intervallAb);
                 $bekanntBis = min($z['ts'], $vorher['ts'] + self::MAX_HOLD);
-                self::buchen($s, $vorher, $bekanntBis);
-                self::unbekannt($s, $vorher['total'], max(0, $naechste - max(0, $bekanntBis - $vorher['ts'])));
+                self::buchen($s, $vorher, $bekanntBis, $von);
+                $bekanntDauer = max(0, $bekanntBis - $intervallAb);
+                self::unbekannt($s, $vorher['total'], max(0, $naechste - $bekanntDauer));
             }
 
             if ($z['tot']) {
@@ -113,7 +117,7 @@ final class Monatsbericht
 
         if ($vorher !== null) {
             $ende = min($vorher['ts'] + self::MAX_HOLD, $bis);
-            self::buchen($s, $vorher, $ende);
+            self::buchen($s, $vorher, $ende, $von);
             self::unbekannt($s, $vorher['total'], max(0, $bis - max($vorher['ts'], $ende)));
             if ($phaseAb !== null) {
                 // Noch still: Bis Zeitraumende, wenn die Reihe bis dahin läuft.
@@ -160,9 +164,9 @@ final class Monatsbericht
         $s['total'] += $sekunden * $total;
     }
 
-    private static function buchen(array &$s, array $z, int $ende): void
+    private static function buchen(array &$s, array $z, int $ende, int $von): void
     {
-        $d = $ende - $z['ts'];
+        $d = $ende - max($z['ts'], $von);
         if ($d <= 0) {
             return;
         }
@@ -185,10 +189,25 @@ final class Monatsbericht
     {
         $stmt = $samples->prepare(
             'SELECT station_id, ts_unix, available, occupied, reserved, out_of_service, unknown, total
-               FROM samples WHERE ts_unix >= ? AND ts_unix < ? AND out_of_service IS NOT NULL
+               FROM samples
+              WHERE ts_unix >= ? AND ts_unix < ? AND out_of_service IS NOT NULL
+             UNION ALL
+             SELECT prior.station_id, prior.ts_unix, prior.available, prior.occupied,
+                    prior.reserved, prior.out_of_service, prior.unknown, prior.total
+               FROM samples AS prior
+              WHERE prior.out_of_service IS NOT NULL
+                AND prior.ts_unix = (
+                    SELECT MAX(previous.ts_unix)
+                      FROM samples AS previous
+                     WHERE previous.station_id = prior.station_id
+                       AND previous.ts_unix < ?
+                       AND previous.out_of_service IS NOT NULL
+                )
               ORDER BY station_id, ts_unix'
         );
-        $stmt->execute([$von, $bis]);
+        // Die letzte Meldung vor Periodenbeginn ist nötig, um ihren gültigen
+        // Anteil (höchstens MAX_HOLD) am Monatsanfang nicht zu verlieren.
+        $stmt->execute([$von, $bis, $von]);
 
         $out = [];
         $rows = 0;
