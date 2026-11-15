@@ -159,6 +159,38 @@ final class SiteReaderTest extends TestCase
         self::assertSame(['A'], array_column($sites, 'idG'));
     }
 
+    public function test_feldname_in_einem_textfeld_wird_ignoriert(): void
+    {
+        $path = $this->write(json_encode([
+            'payload' => [
+                'description' => 'Beispiel: "energyInfrastructureSite": [{"idG":"FAKE"}]',
+                'aegiEnergyInfrastructureTablePublication' => [
+                    'energyInfrastructureTable' => [[
+                        'energyInfrastructureSite' => [['idG' => 'ECHT']],
+                    ]],
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        $sites = iterator_to_array(SiteReader::sites($path), false);
+
+        self::assertSame(['ECHT'], array_column($sites, 'idG'));
+    }
+
+    public function test_uebergrosser_standort_beendet_die_auswertung_begrenzt(): void
+    {
+        $json = '{"energyInfrastructureSite":['
+            . json_encode(['idG' => 'vorher'], JSON_THROW_ON_ERROR) . ','
+            . '{"idG":"zu_gross","text":"' . str_repeat('x', 8 * 1024 * 1024 + 1) . '"},'
+            . json_encode(['idG' => 'danach'], JSON_THROW_ON_ERROR)
+            . ']}';
+
+        $path = $this->write($json);
+        $sites = iterator_to_array(SiteReader::sites($path), false);
+
+        self::assertSame(['vorher'], array_column($sites, 'idG'));
+    }
+
     public function test_eine_fehlende_datei_liefert_nichts_statt_zu_scheitern(): void
     {
         self::assertSame([], iterator_to_array(SiteReader::sites('/gibt/es/nicht.json'), false));
