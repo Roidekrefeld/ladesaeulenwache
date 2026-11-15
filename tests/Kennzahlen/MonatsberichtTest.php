@@ -141,6 +141,7 @@ class MonatsberichtTest extends TestCase
         $scan = Monatsbericht::scan($pdo, self::T0, self::T0 + 4 * $h);
 
         $this->assertSame(3, $scan['rows']);
+        $this->assertSame(4 * $h, $scan['stations'][1]['sec']);
         $this->assertSame(6 * $h + 1800, $scan['stations'][1]['known']);
         $this->assertSame(8 * $h, $scan['stations'][1]['total']);
         $this->assertSame(0, $scan['stations'][2]['known']);
