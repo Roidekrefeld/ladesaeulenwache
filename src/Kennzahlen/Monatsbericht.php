@@ -18,9 +18,9 @@ use PDO;
  * mitgeschrieben als Tabelle `samples` – Schema siehe scan() und README.
  *
  * Gewichtet nach Zeit: Der Abrufer schreibt bei Änderung, sonst spätestens
- * alle vier Stunden. Jeder Zustand
- * gilt bis zur nächsten Zeile, höchstens MAX_HOLD Sekunden; der Rest ist
- * unbekannt.
+ * alle vier Stunden. Jeder Zustand gilt bis zur nächsten Zeile, höchstens
+ * MAX_HOLD Sekunden. Die übrige Zeit des Berichtszeitraums bleibt im Nenner,
+ * zählt aber als unbekannt.
  *
  * ## Was „gestört“ und „Dauerstörung“ heißt
  *
@@ -83,8 +83,19 @@ final class Monatsbericht
 
         foreach ($zeilen as $r) {
             $z = self::zeile($r);
-            if ($vorher !== null) {
-                self::buchen($s, $vorher, min($z['ts'], $vorher['ts'] + self::MAX_HOLD));
+            if ($vorher === null) {
+                // Vor der ersten Meldung ist der Zustand unbekannt. Die erste
+                // beobachtete Gesamtzahl dient als Nenner für diese Anlaufzeit.
+                self::unbekannt($s, $z['total'], max(0, $z['ts'] - $von));
+            } else {
+                // Eine Messung vor Periodenbeginn darf in die Periode
+                // hineinwirken, aber niemals Zeit davor verbuchen.
+                $intervallAb = max($vorher['ts'], $von);
+                $naechste = max(0, $z['ts'] - $intervallAb);
+                $bekanntBis = min($z['ts'], $vorher['ts'] + self::MAX_HOLD);
+                self::buchen($s, $vorher, $bekanntBis, $von);
+                $bekanntDauer = max(0, $bekanntBis - $intervallAb);
+                self::unbekannt($s, $vorher['total'], max(0, $naechste - $bekanntDauer));
             }
 
             if ($z['tot']) {
@@ -106,7 +117,8 @@ final class Monatsbericht
 
         if ($vorher !== null) {
             $ende = min($vorher['ts'] + self::MAX_HOLD, $bis);
-            self::buchen($s, $vorher, $ende);
+            self::buchen($s, $vorher, $ende, $von);
+            self::unbekannt($s, $vorher['total'], max(0, $bis - max($von, $vorher['ts'], $ende)));
             if ($phaseAb !== null) {
                 // Noch still: Bis Zeitraumende, wenn die Reihe bis dahin läuft.
                 $offen = $bis - (int) $phaseBis <= 2 * 86400;
@@ -121,10 +133,11 @@ final class Monatsbericht
     /** @return array{ts: int, avl: int, occ: int, oos: int, total: int, known: int, tot: bool, lebt: bool} */
     private static function zeile(array $r): array
     {
-        $total = (int) ($r['total'] ?? 0);
-        $avl = (int) ($r['available'] ?? 0);
-        $occ = (int) ($r['occupied'] ?? 0) + (int) ($r['reserved'] ?? 0);
-        $oos = (int) ($r['out_of_service'] ?? 0);
+        $total = max(0, (int) ($r['total'] ?? 0));
+        $avl = max(0, (int) ($r['available'] ?? 0));
+        $occ = max(0, (int) ($r['occupied'] ?? 0)) + max(0, (int) ($r['reserved'] ?? 0));
+        $oos = max(0, (int) ($r['out_of_service'] ?? 0));
+        $unknown = max(0, (int) ($r['unknown'] ?? 0));
 
         return [
             'ts' => (int) $r['ts_unix'],
@@ -132,15 +145,28 @@ final class Monatsbericht
             'occ' => $occ,
             'oos' => $oos,
             'total' => $total,
-            'known' => max(0, $total - (int) ($r['unknown'] ?? 0)),
+            'known' => min($total, max(0, $total - $unknown)),
             'tot' => $oos > 0 && $avl === 0 && $occ === 0,
             'lebt' => $avl > 0 || $occ > 0,
         ];
     }
 
-    private static function buchen(array &$s, array $z, int $ende): void
+    /**
+     * Erwartete Ladepunkt-Zeit ohne frische Zustandsmeldung verbuchen.
+     */
+    private static function unbekannt(array &$s, int $total, int $sekunden): void
     {
-        $d = $ende - $z['ts'];
+        if ($sekunden <= 0 || $total <= 0) {
+            return;
+        }
+
+        $s['sec'] += $sekunden;
+        $s['total'] += $sekunden * $total;
+    }
+
+    private static function buchen(array &$s, array $z, int $ende, int $von): void
+    {
+        $d = $ende - max($z['ts'], $von);
         if ($d <= 0) {
             return;
         }
@@ -163,10 +189,25 @@ final class Monatsbericht
     {
         $stmt = $samples->prepare(
             'SELECT station_id, ts_unix, available, occupied, reserved, out_of_service, unknown, total
-               FROM samples WHERE ts_unix >= ? AND ts_unix < ? AND out_of_service IS NOT NULL
+               FROM samples
+              WHERE ts_unix >= ? AND ts_unix < ? AND out_of_service IS NOT NULL
+             UNION ALL
+             SELECT prior.station_id, prior.ts_unix, prior.available, prior.occupied,
+                    prior.reserved, prior.out_of_service, prior.unknown, prior.total
+               FROM samples AS prior
+              WHERE prior.out_of_service IS NOT NULL
+                AND prior.ts_unix = (
+                    SELECT MAX(previous.ts_unix)
+                      FROM samples AS previous
+                     WHERE previous.station_id = prior.station_id
+                       AND previous.ts_unix < ?
+                       AND previous.out_of_service IS NOT NULL
+                )
               ORDER BY station_id, ts_unix'
         );
-        $stmt->execute([$von, $bis]);
+        // Die letzte Meldung vor Periodenbeginn ist nötig, um ihren gültigen
+        // Anteil (höchstens MAX_HOLD) am Monatsanfang nicht zu verlieren.
+        $stmt->execute([$von, $bis, $von]);
 
         $out = [];
         $rows = 0;
@@ -211,7 +252,10 @@ final class Monatsbericht
         $lang = [];
 
         foreach ($stationen as $id => $s) {
-            if ($s['sec'] <= 0 || $s['known'] <= 0) {
+            // Auch Stationen ohne frische Meldung gehören in den
+            // Abdeckungsnenner; sonst verschwinden schweigende Feeds aus
+            // der Statistik und lassen die Quote besser aussehen.
+            if ($s['sec'] <= 0 || $s['total'] <= 0) {
                 continue;
             }
             $m = $meta[$id] ?? ['ags' => null, 'land' => null, 'op' => null, 'kw' => 0.0, 'ort' => null, 'adresse' => null];
