@@ -118,7 +118,7 @@ final class Monatsbericht
         if ($vorher !== null) {
             $ende = min($vorher['ts'] + self::MAX_HOLD, $bis);
             self::buchen($s, $vorher, $ende, $von);
-            self::unbekannt($s, $vorher['total'], max(0, $bis - max($vorher['ts'], $ende)));
+            self::unbekannt($s, $vorher['total'], max(0, $bis - max($von, $vorher['ts'], $ende)));
             if ($phaseAb !== null) {
                 // Noch still: Bis Zeitraumende, wenn die Reihe bis dahin läuft.
                 $offen = $bis - (int) $phaseBis <= 2 * 86400;
