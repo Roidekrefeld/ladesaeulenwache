@@ -61,7 +61,7 @@ final class SiteReader
                         }
                         // Den Schwanz behalten: der Schlüssel könnte genau auf
                         // der Grenze zweier Lesevorgänge liegen.
-                        $keep = strlen(self::KEY);
+                        $keep = strlen(self::KEY) + 1;
                         $buffer = substr($buffer, max(0, strlen($buffer) - $keep));
                         [$buffer, $eof] = self::refill($fh, $buffer, $eof);
                         continue;
@@ -165,12 +165,12 @@ final class SiteReader
 
         while (($at = strpos($buffer, self::KEY, $offset)) !== false) {
             $slashes = 0;
-            for ($i = $at - 1; $i >= 0 && $buffer[$i] === '\\\\'; $i--) {
+            for ($i = $at - 1; $i >= 0 && $buffer[$i] === '\\'; $i--) {
                 $slashes++;
             }
 
             $after = $at + $keyLength;
-            while ($after < $length && str_contains(" \\t\\r\\n", $buffer[$after])) {
+            while ($after < $length && str_contains(" \t\r\n", $buffer[$after])) {
                 $after++;
             }
 
