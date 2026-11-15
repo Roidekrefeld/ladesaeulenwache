@@ -150,7 +150,7 @@ class MonatsberichtTest extends TestCase
         $this->assertSame(0, $scan['stations'][2]['known']);
         $this->assertSame(8 * $h, $scan['stations'][2]['total']);
         $this->assertSame(0, $scan['stations'][3]['oos']);
-        $this->assertSame(2 * Monatsbericht::MAX_HOLD, $scan['stations'][3]['known']);
+        $this->assertSame(2 * (Monatsbericht::MAX_HOLD - 2 * $h), $scan['stations'][3]['known']);
     }
 
     public function testMessluekeBeendetDauerstoerungNicht(): void
