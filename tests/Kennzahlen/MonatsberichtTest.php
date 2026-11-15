@@ -137,15 +137,20 @@ class MonatsberichtTest extends TestCase
         $insert->execute([1, self::T0 + 3 * $h, 2, 0, 0]);
         // Station 2 hat im Berichtszeitraum keine neue Meldung mehr.
         $insert->execute([2, self::T0 - 10 * $h, 1, 0, 1]);
+        // Bei identischem Zeitstempel gewinnt für Station 3 die zuletzt gespeicherte Zeile.
+        $insert->execute([3, self::T0 - 2 * $h, 0, 0, 1]);
+        $insert->execute([3, self::T0 - 2 * $h, 2, 0, 0]);
 
         $scan = Monatsbericht::scan($pdo, self::T0, self::T0 + 4 * $h);
 
-        $this->assertSame(3, $scan['rows']);
+        $this->assertSame(4, $scan['rows']);
         $this->assertSame(4 * $h, $scan['stations'][1]['sec']);
         $this->assertSame(6 * $h + 1800, $scan['stations'][1]['known']);
         $this->assertSame(8 * $h, $scan['stations'][1]['total']);
         $this->assertSame(0, $scan['stations'][2]['known']);
         $this->assertSame(8 * $h, $scan['stations'][2]['total']);
+        $this->assertSame(0, $scan['stations'][3]['oos']);
+        $this->assertSame(2 * Monatsbericht::MAX_HOLD, $scan['stations'][3]['known']);
     }
 
     public function testMessluekeBeendetDauerstoerungNicht(): void
