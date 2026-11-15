@@ -6,8 +6,10 @@
  *   bin/monatsbericht --db=messreihe.sqlite --monat=2026-10 [--meta=stationen.csv] [--beginn=2026-09-03]
  *
  * stationen.csv (Semikolon, mit Kopfzeile):
- *   station_id;ags;land;betreiber;kw
+ *   station_id;ags;land;betreiber;kw;ladepunkte;aktiv_ab
+ * Die letzten beiden Spalten sind optional und erlauben auch Inventar ohne Statusmeldungen.
  * ags = Amtlicher Gemeindeschlüssel des Kreises (5 Stellen), land = 2 Stellen.
+ * aktiv_ab = erster aktiver Tag (JJJJ-MM-TT); ohne Angabe gilt der Monatsanfang.
  * Ohne Metadaten gibt es nur die Bundeszahlen und die Dauerstörungen.
  */
 require __DIR__ . '/../autoload.php';
@@ -71,18 +73,53 @@ if (!empty($opt['meta'])) {
         $r = array_combine($kopf, $z);
         $stationId = filter_var(trim((string) $r['station_id']), FILTER_VALIDATE_INT);
         $kw = trim((string) $r['kw']);
+        $ags = trim((string) $r['ags']);
+        $land = trim((string) $r['land']);
+        $ladepunkteText = trim((string) ($r['ladepunkte'] ?? ''));
+        $aktivAbText = trim((string) ($r['aktiv_ab'] ?? ''));
 
-        if ($stationId === false || ($kw !== '' && !is_numeric($kw))) {
+        $ladepunkte = $ladepunkteText === ''
+            ? null
+            : filter_var($ladepunkteText, FILTER_VALIDATE_INT);
+
+        $aktivAb = null;
+        if ($aktivAbText !== '') {
+            $datum = DateTimeImmutable::createFromFormat(
+                '!Y-m-d',
+                $aktivAbText,
+                new DateTimeZone('Europe/Berlin')
+            );
+            $fehler = DateTimeImmutable::getLastErrors();
+            if ($datum === false
+                || ($fehler !== false && ($fehler['warning_count'] > 0 || $fehler['error_count'] > 0))
+                || $datum->format('Y-m-d') !== $aktivAbText) {
+                fclose($fh);
+                fwrite(STDERR, "Ungültiges Datum aktiv_ab in {$datei}, Zeile {$zeilennummer}. Erwartet wird JJJJ-MM-TT.\n");
+                exit(2);
+            }
+            $aktivAb = $datum->getTimestamp();
+        }
+
+        $kwZahl = $kw === '' ? 0.0 : (is_numeric($kw) ? (float) $kw : -1.0);
+        if ($stationId === false || $stationId <= 0
+            || ($kw !== '' && (!is_numeric($kw) || !is_finite($kwZahl) || $kwZahl < 0))
+            || ($ags !== '' && !preg_match('/^\\d{5}$/', $ags))
+            || ($land !== '' && !preg_match('/^\\d{2}$/', $land))
+            || ($ags !== '' && $land !== '' && substr($ags, 0, 2) !== $land)
+            || ($ladepunkteText !== '' && ($ladepunkte === false || $ladepunkte <= 0))
+            || array_key_exists($stationId, $meta)) {
             fclose($fh);
-            fwrite(STDERR, "Ungültiger Wert für station_id oder kw in {$datei}, Zeile {$zeilennummer}.\n");
+            fwrite(STDERR, "Ungültige oder doppelte Metadaten in {$datei}, Zeile {$zeilennummer}.\n");
             exit(2);
         }
 
         $meta[$stationId] = [
-            'ags' => $r['ags'] !== '' ? $r['ags'] : null,
-            'land' => $r['land'] !== '' ? $r['land'] : null,
-            'op' => $r['betreiber'] !== '' ? $r['betreiber'] : null,
-            'kw' => $kw !== '' ? (float) $kw : 0.0,
+            'ags' => $ags !== '' ? $ags : null,
+            'land' => $land !== '' ? $land : null,
+            'op' => trim((string) $r['betreiber']) !== '' ? trim((string) $r['betreiber']) : null,
+            'kw' => $kwZahl,
+            'ladepunkte' => $ladepunkte,
+            'aktiv_ab' => $aktivAb,
             'ort' => null,
             'adresse' => null,
         ];

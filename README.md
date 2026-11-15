@@ -58,13 +58,13 @@ CREATE TABLE samples (
 CREATE INDEX samples_station_time ON samples (station_id, ts_unix);
 ```
 
-`stationen.csv` ordnet die Ladeeinrichtungen zu, getrennt mit Semikolon: `station_id;ags;land;betreiber;kw`. Dabei ist `ags` der 5-stellige Kreisschlüssel und `land` der 2-stellige Länderschlüssel.
+`stationen.csv` ordnet die Ladeeinrichtungen zu, getrennt mit Semikolon: `station_id;ags;land;betreiber;kw`. Dabei ist `ags` der 5-stellige Kreisschlüssel und `land` der 2-stellige Länderschlüssel. Optional können `ladepunkte` und `aktiv_ab` (Datum `JJJJ-MM-TT`) ergänzt werden. Damit lassen sich auch Ladeeinrichtungen berücksichtigen, von denen im Berichtszeitraum keine einzige Statusmeldung einging. Für solche Registereinträge ist `ladepunkte` erforderlich; ohne `aktiv_ab` wird angenommen, dass sie bereits zu Monatsbeginn in Betrieb waren.
 
 ## Methodik
 
 - **Gemessen wird, was die Betreiber melden, nicht was vor Ort passiert.** Ein Betreiber, der bei einer Störung schweigt, erscheint mit niedriger Quote. Deshalb steht neben jeder Quote die **Meldeabdeckung**.
 - **Störungsquote** = gestörte Ladepunkt-Zeit ÷ *bekannte* Ladepunkt-Zeit. Zeit ohne Meldung zählt nicht mit. Gegen die Gesamtzeit gerechnet stünde der schweigsame Betreiber besser da.
-- **Gewichtung nach Zeit:** Jeder Zustand gilt bis zur nächsten Meldung, höchstens 4 h 15 min (`MAX_HOLD`). Danach gilt er als unbekannt. Die Meldeabdeckung teilt die bekannte Ladepunkt-Zeit durch die erwartete Ladepunkt-Zeit des gesamten Berichtszeitraums; Zeit vor der ersten Meldung und nach Ablauf von `MAX_HOLD` zählt als unbekannt. Vor der ersten Meldung wird die erste bekannte Gesamtzahl als Nenner angesetzt, da das Messschema kein Inbetriebnahmedatum enthält.
+- **Gewichtung nach Zeit:** Jeder Zustand gilt bis zur nächsten Meldung, höchstens 4 h 15 min (`MAX_HOLD`). Danach gilt er als unbekannt. Die Meldeabdeckung teilt die bekannte Ladepunkt-Zeit durch die erwartete Ladepunkt-Zeit des gesamten Berichtszeitraums; Zeit vor der ersten Meldung und nach Ablauf von `MAX_HOLD` zählt als unbekannt. Vor der ersten Meldung wird die erste bekannte Gesamtzahl als Nenner angesetzt, da das Messschema kein Inbetriebnahmedatum enthält. Registereinträge mit `ladepunkte`, aber ohne Messreihe, werden ebenfalls als vollständig unbekannt berücksichtigt. Ihr Nenner beginnt bei `aktiv_ab`; fehlt dieses Datum, wird der Monatsanfang angenommen.
 - **Dauerstörung:** Eine Ladeeinrichtung ist mindestens 7 Tage am Stück komplett still, das heißt mindestens ein Punkt ist als gestört gemeldet und keiner ist frei, belegt oder reserviert. Messlücken bis 7 Tage beenden die Phase nicht. Sie endet erst mit einem Lebenszeichen.
 - **Ränge** gibt es nur, wenn die Zahl trägt. Ein Kreis braucht mindestens 30 gemessene Ladeeinrichtungen, ein Betreiber mindestens 200. In beiden Fällen muss für mindestens 50 % der Zeit eine Meldung vorliegen. Die Schwelle für Betreiber ist gemessen: Ab 200 Standorten blieb die Rangfolge zwischen zwei Wochenhälften stabil, die Rangkorrelation lag bei 0,94.
 - `removed` und `planned` zählen als unbekannt, nicht als gestört.
