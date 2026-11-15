@@ -84,6 +84,35 @@ class MonatsberichtTest extends TestCase
         $this->assertSame(50.0, $bericht['kreise']['01001']['abdeckung']);
     }
 
+    public function testLetzteMeldungVorPeriodenbeginnWirktBisZumAblaufDerFrischefrist(): void
+    {
+        $h = 3600;
+        $s = Monatsbericht::station([
+            self::z(self::T0 - 2 * $h, 1, 0, 1),
+            self::z(self::T0 + 3 * $h, 2, 0, 0),
+        ], self::T0, self::T0 + 4 * $h);
+
+        // Die alte Meldung gilt noch 2 h 15 min in den Monat hinein.
+        // Danach sind 45 min unbekannt; die neue Meldung gilt die letzte Stunde.
+        $this->assertSame(4 * $h, $s['sec']);
+        $this->assertSame(8 * $h, $s['total']);
+        $this->assertSame(6 * $h + 1800, $s['known']);
+        $this->assertSame(2 * $h + 900, $s['oos']);
+    }
+
+    public function testAbgelaufeneMeldungVorPeriodenbeginnZaehltNichtAlsBekannt(): void
+    {
+        $h = 3600;
+        $s = Monatsbericht::station([
+            self::z(self::T0 - 10 * $h, 1, 0, 1),
+        ], self::T0, self::T0 + 3 * $h);
+
+        $this->assertSame(3 * $h, $s['sec']);
+        $this->assertSame(6 * $h, $s['total']);
+        $this->assertSame(0, $s['known']);
+        $this->assertSame(0, $s['oos']);
+    }
+
     public function testMessluekeBeendetDauerstoerungNicht(): void
     {
         $tag = 86400;
