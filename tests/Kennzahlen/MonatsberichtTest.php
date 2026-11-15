@@ -45,7 +45,7 @@ class MonatsberichtTest extends TestCase
         ], self::T0, self::T0 + 10 * $h);
 
         $this->assertSame(10 * $h, $s['sec']);
-        $this->assertSame(20 * 10 * $h / 10, $s['total']);
+        $this->assertSame(2 * 10 * $h, $s['total']);
         $this->assertSame(2 * Monatsbericht::MAX_HOLD, $s['known']);
         $this->assertSame(Monatsbericht::MAX_HOLD, $s['oos']);
         $this->assertEqualsWithDelta(42.5, 100 * $s['known'] / $s['total'], 0.001);
