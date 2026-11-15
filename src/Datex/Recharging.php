@@ -188,6 +188,7 @@ final class Recharging
         $taxIncluded = null;
         $taxRate = null;
         $taxWiderspruch = false;
+        $taxRateWiderspruch = false;
 
         foreach ($prices as $price) {
             if (!is_array($price)) {
@@ -235,13 +236,25 @@ final class Recharging
                     // Dokument darueber, ob 0,55 EUR netto oder brutto sind –
                     // ein Unterschied von 19 %.
                     if (isset($price['taxIncluded'])) {
-                        $neu = (bool) $price['taxIncluded'];
-                        $taxIncluded = ($taxIncluded !== null && $taxIncluded !== $neu) ? null : $neu;
-                        $taxWiderspruch = $taxWiderspruch || ($taxIncluded === null);
+                        if (!is_bool($price['taxIncluded'])) {
+                            $taxWiderspruch = true;
+                        } else {
+                            $neu = $price['taxIncluded'];
+                            if ($taxIncluded !== null && $taxIncluded !== $neu) {
+                                $taxWiderspruch = true;
+                            } else {
+                                $taxIncluded = $neu;
+                            }
+                        }
                     }
 
-                    if (is_numeric($price['taxRate'] ?? null)) {
-                        $taxRate = (float) $price['taxRate'];
+                    if (is_numeric($price['taxRate'] ?? null) && (float) $price['taxRate'] >= 0.0) {
+                        $neu = (float) $price['taxRate'];
+                        if ($taxRate !== null && abs($taxRate - $neu) > 0.0001) {
+                            $taxRateWiderspruch = true;
+                        } else {
+                            $taxRate = $neu;
+                        }
                     }
                     break;
 
@@ -270,6 +283,8 @@ final class Recharging
             $taxRate = null;
         } elseif ($taxWiderspruch) {
             $taxIncluded = null;
+            $taxRate = null;
+        } elseif ($taxRateWiderspruch) {
             $taxRate = null;
         }
 

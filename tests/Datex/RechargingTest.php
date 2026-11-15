@@ -240,6 +240,18 @@ final class RechargingTest extends TestCase
         self::assertNull($tarif['taxIncluded']);
     }
 
+    public function test_widersprechende_steuersaetze_werden_nicht_aufgeloest(): void
+    {
+        $tarif = Recharging::tariff($this->mitPreisen([
+            ['priceType' => ['value' => 'pricePerKWh'], 'value' => 0.55, 'taxIncluded' => false, 'taxRate' => 19.0],
+            ['priceType' => ['value' => 'pricePerKWh'], 'value' => 0.55, 'taxIncluded' => false, 'taxRate' => 7.0],
+        ]));
+
+        self::assertSame(0.55, $tarif['perKwh']);
+        self::assertFalse($tarif['taxIncluded']);
+        self::assertNull($tarif['taxRate']);
+    }
+
     public function test_ohne_preisangabe_kommt_nichts(): void
     {
         self::assertNull(Recharging::tariff([]));

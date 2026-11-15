@@ -87,17 +87,22 @@ final class OutageRate
         $je = [];
 
         foreach ($stationen as $zeile) {
-            // Bekannt ist, was gemeldet wurde. Negativ kann das nicht werden;
-            // kaputte Zahlen aus der Quelle sollen die Summe nicht verschieben.
-            $bekannt = max(0, $zeile['point_time'] - $zeile['unknown']);
+            // Quelldaten begrenzen, damit fehlerhafte Werte keine
+            // negativen Summen oder Ausfallquoten über 100 % erzeugen.
+            $pointTime = max(0, (int) $zeile['point_time']);
+            $samples = max(0, (int) $zeile['samples']);
+            $unknown = max(0, (int) $zeile['unknown']);
+            $bekannt = min($pointTime, max(0, $pointTime - $unknown));
+            $ausfall = min($bekannt, max(0, (int) $zeile['out_of_service']));
+            $stationId = (int) $zeile['station_id'];
 
             $markt['stations']++;
-            $markt['samples'] += $zeile['samples'];
-            $markt['point_time'] += $zeile['point_time'];
+            $markt['samples'] += $samples;
+            $markt['point_time'] += $pointTime;
             $markt['known'] += $bekannt;
-            $markt['outage'] += $zeile['out_of_service'];
+            $markt['outage'] += $ausfall;
 
-            $name = trim($betreiber[$zeile['station_id']] ?? '');
+            $name = trim($betreiber[$stationId] ?? '');
 
             if ($name === '') {
                 continue;
@@ -105,10 +110,10 @@ final class OutageRate
 
             $je[$name] ??= ['stations' => 0, 'samples' => 0, 'point_time' => 0, 'known' => 0, 'outage' => 0];
             $je[$name]['stations']++;
-            $je[$name]['samples'] += $zeile['samples'];
-            $je[$name]['point_time'] += $zeile['point_time'];
+            $je[$name]['samples'] += $samples;
+            $je[$name]['point_time'] += $pointTime;
             $je[$name]['known'] += $bekannt;
-            $je[$name]['outage'] += $zeile['out_of_service'];
+            $je[$name]['outage'] += $ausfall;
         }
 
         $out = [];

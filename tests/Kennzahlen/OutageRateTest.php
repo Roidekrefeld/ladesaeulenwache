@@ -138,6 +138,26 @@ class OutageRateTest extends TestCase
         $this->assertSame(1.0, $ergebnis['market']['coverage']);
     }
 
+    public function test_inconsistent_source_values_cannot_produce_rates_above_one_hundred_percent(): void
+    {
+        $stationen = $this->stationen(200, [
+            'point_time' => 100,
+            'unknown' => 30,
+            'out_of_service' => 200,
+        ]);
+
+        $ergebnis = OutageRate::aggregate(
+            $stationen,
+            $this->alle($stationen, 'Fehlerhafte Quelle GmbH')
+        );
+
+        self::assertSame(14000, $ergebnis['market']['known']);
+        self::assertSame(14000, $ergebnis['market']['outage']);
+        self::assertSame(1.0, $ergebnis['market']['rate']);
+        self::assertSame(1.0, $ergebnis['operators'][0]['rate']);
+        self::assertSame(0.7, $ergebnis['operators'][0]['coverage']);
+    }
+
     /** Ohne Messwerte gibt es keine Marktzahl, und schon gar keine Null. */
     public function test_without_data_there_is_no_rate(): void
     {

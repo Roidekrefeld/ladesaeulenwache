@@ -26,19 +26,69 @@ $scan = Monatsbericht::scan($pdo, $von, $bis);
 
 $meta = [];
 if (!empty($opt['meta'])) {
-    $fh = fopen((string) $opt['meta'], 'r');
+    $datei = (string) $opt['meta'];
+    $fh = @fopen($datei, 'r');
+
+    if ($fh === false) {
+        fwrite(STDERR, "Metadatendatei kann nicht gelesen werden: {$datei}\n");
+        exit(2);
+    }
+
     $kopf = fgetcsv($fh, null, ';', '"', '');
+    if ($kopf === false) {
+        fclose($fh);
+        fwrite(STDERR, "Metadatendatei enthält keine Kopfzeile: {$datei}\n");
+        exit(2);
+    }
+
+    $kopf = array_map(static fn($feld): string => trim((string) $feld), $kopf);
+    $pflichtfelder = ['station_id', 'ags', 'land', 'betreiber', 'kw'];
+    $fehlend = array_values(array_diff($pflichtfelder, $kopf));
+
+    if ($fehlend !== [] || count(array_unique($kopf)) !== count($kopf)) {
+        fclose($fh);
+        $hinweis = $fehlend !== []
+            ? 'Fehlende Spalten: ' . implode(', ', $fehlend)
+            : 'Die Kopfzeile enthält doppelte Spaltennamen.';
+        fwrite(STDERR, "Ungültige Kopfzeile in {$datei}. {$hinweis}\n");
+        exit(2);
+    }
+
+    $zeilennummer = 1;
     while (($z = fgetcsv($fh, null, ';', '"', '')) !== false) {
-        $r = array_combine($kopf, array_pad($z, count($kopf), ''));
-        $meta[(int) $r['station_id']] = [
+        $zeilennummer++;
+
+        if (count($z) === 1 && $z[0] === null) {
+            continue;
+        }
+
+        if (count($z) !== count($kopf)) {
+            fclose($fh);
+            fwrite(STDERR, "Ungültige Spaltenzahl in {$datei}, Zeile {$zeilennummer}.\n");
+            exit(2);
+        }
+
+        $r = array_combine($kopf, $z);
+        $stationId = filter_var(trim((string) $r['station_id']), FILTER_VALIDATE_INT);
+        $kw = trim((string) $r['kw']);
+
+        if ($stationId === false || ($kw !== '' && !is_numeric($kw))) {
+            fclose($fh);
+            fwrite(STDERR, "Ungültiger Wert für station_id oder kw in {$datei}, Zeile {$zeilennummer}.\n");
+            exit(2);
+        }
+
+        $meta[$stationId] = [
             'ags' => $r['ags'] !== '' ? $r['ags'] : null,
             'land' => $r['land'] !== '' ? $r['land'] : null,
-            'op' => $r['betreiber'] ?? null,
-            'kw' => (float) ($r['kw'] ?? 0),
+            'op' => $r['betreiber'] !== '' ? $r['betreiber'] : null,
+            'kw' => $kw !== '' ? (float) $kw : 0.0,
             'ort' => null,
             'adresse' => null,
         ];
     }
+
+    fclose($fh);
 }
 
 $bericht = Monatsbericht::auswerten($scan['stations'], $meta, [], [], $von, $bis);
