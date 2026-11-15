@@ -18,9 +18,9 @@ use PDO;
  * mitgeschrieben als Tabelle `samples` – Schema siehe scan() und README.
  *
  * Gewichtet nach Zeit: Der Abrufer schreibt bei Änderung, sonst spätestens
- * alle vier Stunden. Jeder Zustand
- * gilt bis zur nächsten Zeile, höchstens MAX_HOLD Sekunden; der Rest ist
- * unbekannt.
+ * alle vier Stunden. Jeder Zustand gilt bis zur nächsten Zeile, höchstens
+ * MAX_HOLD Sekunden. Die übrige Zeit des Berichtszeitraums bleibt im Nenner,
+ * zählt aber als unbekannt.
  *
  * ## Was „gestört“ und „Dauerstörung“ heißt
  *
@@ -83,8 +83,15 @@ final class Monatsbericht
 
         foreach ($zeilen as $r) {
             $z = self::zeile($r);
-            if ($vorher !== null) {
-                self::buchen($s, $vorher, min($z['ts'], $vorher['ts'] + self::MAX_HOLD));
+            if ($vorher === null) {
+                // Vor der ersten Meldung ist der Zustand unbekannt. Die erste
+                // beobachtete Gesamtzahl dient als Nenner für diese Anlaufzeit.
+                self::unbekannt($s, $z['total'], max(0, $z['ts'] - $von));
+            } else {
+                $naechste = max(0, $z['ts'] - $vorher['ts']);
+                $bekanntBis = min($z['ts'], $vorher['ts'] + self::MAX_HOLD);
+                self::buchen($s, $vorher, $bekanntBis);
+                self::unbekannt($s, $vorher['total'], max(0, $naechste - max(0, $bekanntBis - $vorher['ts'])));
             }
 
             if ($z['tot']) {
@@ -107,6 +114,7 @@ final class Monatsbericht
         if ($vorher !== null) {
             $ende = min($vorher['ts'] + self::MAX_HOLD, $bis);
             self::buchen($s, $vorher, $ende);
+            self::unbekannt($s, $vorher['total'], max(0, $bis - max($vorher['ts'], $ende)));
             if ($phaseAb !== null) {
                 // Noch still: Bis Zeitraumende, wenn die Reihe bis dahin läuft.
                 $offen = $bis - (int) $phaseBis <= 2 * 86400;
@@ -121,10 +129,11 @@ final class Monatsbericht
     /** @return array{ts: int, avl: int, occ: int, oos: int, total: int, known: int, tot: bool, lebt: bool} */
     private static function zeile(array $r): array
     {
-        $total = (int) ($r['total'] ?? 0);
-        $avl = (int) ($r['available'] ?? 0);
-        $occ = (int) ($r['occupied'] ?? 0) + (int) ($r['reserved'] ?? 0);
-        $oos = (int) ($r['out_of_service'] ?? 0);
+        $total = max(0, (int) ($r['total'] ?? 0));
+        $avl = max(0, (int) ($r['available'] ?? 0));
+        $occ = max(0, (int) ($r['occupied'] ?? 0)) + max(0, (int) ($r['reserved'] ?? 0));
+        $oos = max(0, (int) ($r['out_of_service'] ?? 0));
+        $unknown = max(0, (int) ($r['unknown'] ?? 0));
 
         return [
             'ts' => (int) $r['ts_unix'],
@@ -132,10 +141,23 @@ final class Monatsbericht
             'occ' => $occ,
             'oos' => $oos,
             'total' => $total,
-            'known' => max(0, $total - (int) ($r['unknown'] ?? 0)),
+            'known' => min($total, max(0, $total - $unknown)),
             'tot' => $oos > 0 && $avl === 0 && $occ === 0,
             'lebt' => $avl > 0 || $occ > 0,
         ];
+    }
+
+    /**
+     * Erwartete Ladepunkt-Zeit ohne frische Zustandsmeldung verbuchen.
+     */
+    private static function unbekannt(array &$s, int $total, int $sekunden): void
+    {
+        if ($sekunden <= 0 || $total <= 0) {
+            return;
+        }
+
+        $s['sec'] += $sekunden;
+        $s['total'] += $sekunden * $total;
     }
 
     private static function buchen(array &$s, array $z, int $ende): void
@@ -211,7 +233,10 @@ final class Monatsbericht
         $lang = [];
 
         foreach ($stationen as $id => $s) {
-            if ($s['sec'] <= 0 || $s['known'] <= 0) {
+            // Auch Stationen ohne frische Meldung gehören in den
+            // Abdeckungsnenner; sonst verschwinden schweigende Feeds aus
+            // der Statistik und lassen die Quote besser aussehen.
+            if ($s['sec'] <= 0 || $s['total'] <= 0) {
                 continue;
             }
             $m = $meta[$id] ?? ['ags' => null, 'land' => null, 'op' => null, 'kw' => 0.0, 'ort' => null, 'adresse' => null];
