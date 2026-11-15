@@ -53,7 +53,7 @@ final class SiteReader
             while (true) {
                 if (!$inArray) {
                     // Nächste Standortliste suchen.
-                    $at = strpos($buffer, self::KEY);
+                    $at = self::findKey($buffer);
 
                     if ($at === false) {
                         if ($eof) {
@@ -61,7 +61,7 @@ final class SiteReader
                         }
                         // Den Schwanz behalten: der Schlüssel könnte genau auf
                         // der Grenze zweier Lesevorgänge liegen.
-                        $keep = strlen(self::KEY);
+                        $keep = strlen(self::KEY) + 1;
                         $buffer = substr($buffer, max(0, strlen($buffer) - $keep));
                         [$buffer, $eof] = self::refill($fh, $buffer, $eof);
                         continue;
@@ -149,6 +149,42 @@ final class SiteReader
     }
 
     /**
+     * Findet den Feldnamen außerhalb von JSON-Zeichenketten.
+     *
+     * Ein einfacher strpos()-Treffer reicht nicht: Der Text eines anderen
+     * Feldes kann den vollständigen Feldnamen samt scheinbarem Array enthalten.
+     * In gültigem JSON sind die Anführungszeichen eines solchen Texttreffers
+     * maskiert. Ein echter Feldname hat außerdem nach optionalem Leerraum
+     * einen Doppelpunkt.
+     */
+    private static function findKey(string $buffer): int|false
+    {
+        $offset = 0;
+        $length = strlen($buffer);
+        $keyLength = strlen(self::KEY);
+
+        while (($at = strpos($buffer, self::KEY, $offset)) !== false) {
+            $slashes = 0;
+            for ($i = $at - 1; $i >= 0 && $buffer[$i] === '\\'; $i--) {
+                $slashes++;
+            }
+
+            $after = $at + $keyLength;
+            while ($after < $length && str_contains(" \t\r\n", $buffer[$after])) {
+                $after++;
+            }
+
+            if (($slashes % 2) === 0 && $after < $length && $buffer[$after] === ':') {
+                return $at;
+            }
+
+            $offset = $at + 1;
+        }
+
+        return false;
+    }
+
+    /**
      * Vom Doppelpunkt bis zur öffnenden eckigen Klammer vorspulen.
      *
      * @param resource $fh
@@ -197,6 +233,13 @@ final class SiteReader
             $len = strlen($buffer);
 
             for (; $i < $len; $i++) {
+                if ($i >= self::MAX_SITE_BYTES) {
+                    // Vor der Verarbeitung weiterer Bytes abbrechen. Die
+                    // Prüfung erst nach dem Chunk wäre zu spät: Ein Objekt
+                    // könnte innerhalb desselben Chunks bereits geschlossen sein.
+                    return [$buffer, $eof, null];
+                }
+
                 $c = $buffer[$i];
 
                 if ($inString) {
